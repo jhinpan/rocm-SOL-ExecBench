@@ -74,11 +74,31 @@ sol-execbench examples/cute_dsl/jamba_attn_proj \
 |---|---|
 | `--compile-timeout` | Compilation timeout in seconds (default: 120) |
 | `--timeout` | Evaluation timeout in seconds (default: 600) |
+| `--config` | Path to a BenchmarkConfig JSON (see [Benchmark Config](#benchmark-config) below) |
 | `-o, --output` | Write JSONL traces to file |
 | `--json` | Print traces as JSON to stdout |
 | `--lock-clocks` | Lock GPU clocks for stable benchmarks |
 | `--keep-staging` | Preserve staging directory after run |
 | `-v, --verbose` | Show subprocess output |
+
+### Benchmark Config
+
+Pass `--config bench.json` to override evaluator defaults. All fields are optional.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `warmup_runs` | int | `10` | GPU warmup iterations before timing |
+| `iterations` | int | `50` | Timing iterations averaged into the latency report |
+| `lock_clocks` | bool | `false` | Require GPU clocks to be locked (also exposed as `--lock-clocks`) |
+| `benchmark_reference` | bool | `false` | When `true`, also time the reference implementation to compute speedup. **Disabled by default** because the reference can be dramatically slower than the kernel (sometimes >1 h), which dominates total evaluation time. Enable when you need a speedup factor in the trace. |
+| `seed` | int | `200` | RNG seed for input generation |
+
+A template with every field at its default value lives at [`bench_config.example.json`](bench_config.example.json) — copy it, edit the fields you want to override, and pass it via `--config`:
+
+```bash
+cp bench_config.example.json bench.json   # then edit bench.json
+sol-execbench <problem_dir> --solution solution.json --config bench.json
+```
 
 ## Running a Dataset
 
