@@ -313,7 +313,7 @@ def cli(
                 capture_output=True,
                 text=True,
                 timeout=compile_timeout,
-                env={**os.environ, "PYTORCH_ALLOC_CONF": "expandable_segments:True"},
+                env={**os.environ, "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"},
             )
             progress.update(task, completed=True)
 
@@ -347,7 +347,7 @@ def cli(
             capture_output=True,
             text=True,
             timeout=timeout,
-            env={**os.environ, "PYTORCH_ALLOC_CONF": "expandable_segments:True"},
+            env={**os.environ, "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"},
         )
         progress.update(task, completed=True)
 
