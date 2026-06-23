@@ -27,6 +27,22 @@ All five PyTorch/Triton examples pass (`bash scripts/run_rocm_examples.sh`):
 | `examples/triton/nemotron_rms_norm` | Triton | 3/3 workloads passed |
 | `examples/triton/olmo3_post_norm` | Triton | 3/3 workloads passed |
 
+## Full-dataset runnability on MI300X (235 problems)
+
+The SOL-ExecBench dataset (`nvidia/SOL-ExecBench`) ships `definition.json` + `reference.py` + `workload.jsonl` per problem but **no solutions** (it's a generation benchmark). To measure how much of it runs on AMD, we generate a PyTorch **reference-as-solution** for every problem (`scripts/make_reference_solutions.py`) and run the whole set through the ported harness (`scripts/run_rocm_dataset.py`). This validates that each problem's inputs/workloads/reference execute + time on MI300X (correctness trivially passes; speedup ≈ 1×).
+
+| Subset | Problems | **Runs on MI300X** | Notes |
+|---|--:|--:|---|
+| **L1** single-op | 94 | **94 (100%)** | 1 needed >240 s (passes at 600 s) |
+| **L2** fusion | 82 | **81 (99%)** | `L2/033` partial (13/16 workloads); 3 needed 600 s |
+| **Quant** | 33 | **0** | FP8/FP4 (`float8_e4m3fn` / `float4_e2m1fn_x2`) — NVIDIA numeric formats; FP8 ops unsupported on MI300X (expected) |
+| **FlashInfer-Bench** | 26 | **0** | `Definition` has an empty-string field → fails pydantic `min_length` at load (data/loader issue, not GPU; would fail on NVIDIA too) |
+| **Total** | 235 | **175** | |
+
+**Takeaway:** the **standard L1+L2 SOL-ExecBench (176 problems) is ~99% runnable on MI300X (175/176)** via its PyTorch reference. The non-runnable 60 are entirely FP8/FP4 numeric formats (Quant) or a strict-validation data quirk (FlashInfer-Bench) — **not** an MI300X capability gap. Reproduce: `python scripts/make_reference_solutions.py && python scripts/run_rocm_dataset.py` (writes `results/rocm_dataset_runnability.json`).
+
+> This measures *runnability*, not kernel quality. A real benchmark score needs generated solutions (e.g., via an LLM) evaluated against these references — and a meaningful **SOL-Score requires MI300X (CDNA3) roofline bounds**, which NVIDIA's SOLAR does not produce (see caveats).
+
 ## What was changed for ROCm
 - **`core/bench/timing.py`** — guarded the module-level `from cupti import cupti` (CUPTI is NVIDIA-only, absent on ROCm) behind a `try/except` (`_HAS_CUPTI`); changed `time_runnable` default `methodology` to `cuda_events`; auto-downgrade `cupti → cuda_events` when CUPTI is missing. The CUDA-event path runs unchanged on ROCm via PyTorch's HIP shim.
 - **`pyproject.toml`** — relaxed `requires-python` to `>=3.10` (ROCm images commonly ship 3.10).

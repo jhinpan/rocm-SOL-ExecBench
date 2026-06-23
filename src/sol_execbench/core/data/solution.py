@@ -64,6 +64,12 @@ class SupportedHardware(str, Enum):
     """NVIDIA B200."""
     LOCAL = "LOCAL"
     """Local NVIDIA GPU."""
+    MI300X = "MI300X"
+    """AMD Instinct MI300X (CDNA3, gfx942) — ROCm port."""
+    MI355X = "MI355X"
+    """AMD Instinct MI355X (CDNA4, gfx950) — ROCm port."""
+    LOCAL_AMD = "LOCAL_AMD"
+    """Local AMD ROCm GPU."""
 
 
 class SupportedBindings(str, Enum):
