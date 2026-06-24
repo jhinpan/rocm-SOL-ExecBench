@@ -18,7 +18,12 @@ python scripts/run_aiter_mapping.py '<glob>/definition.json'
 | `examples/cuda_cpp/rmsnorm` | `rms_norm` | CK | 14/14 ✅ | **3.25×** |
 | `examples/triton/rmsnorm` | `rms_norm` | CK | 14/14 ✅ | **3.30×** |
 
-The driver **gates on correctness** — a mismatch (e.g. wrong GELU variant) is reported as FAIL and excluded, never counted as a win.
+The driver **gates on correctness** — a result is a win only when *every* workload row PASSED. A mismatch (e.g. wrong GELU variant), a solution crash, empty/garbled harness output, a missing `sol-execbench`, or a timeout all report FAIL and are excluded, never counted as a win.
+
+## Recognizer guards
+Recognizers are deliberately conservative (a false negative only costs coverage; a false positive would hand a fused problem a single-op kernel). Each requires an exact input/output arity, requires the op's core signature (e.g. RMSNorm needs `rsqrt`, `mean`, and an explicit `x**2`/`pow(2)`), and rejects any reference containing fused/composite tokens (`attention`, `softmax`, `matmul`, `rope`, `conv`, `residual`, `variance`/layernorm, `dropout`, `embedding`, …). GEGLU vs SwiGLU are disambiguated by the gate activation (`gelu` vs `silu`). Verified across the full L1+L2+FlashInfer dataset: zero false positives.
+
+Lint: `ruff check scripts/aiter_kernel_map.py scripts/run_aiter_mapping.py` passes clean.
 
 ## Scope
 Recognizers here cover **clean single ops**. The SOL dataset is dominated by **fused/composite** chains (e.g. attention+rope+qk_norm, conv+groupnorm+silu+residual), so single-op dataset coverage is small by design — those are handled by composing aiter primitives / aiter fused kernels (`fused_add_rmsnorm`, `fused_qk_norm_rope`, `silu_and_mul`, gated FF) in the **L2-fusion** work. This PR establishes the extensible framework + verified speedups; coverage grows by adding recognizers. See `KERNEL_MAPPING.md` for the full op→kernel map.
