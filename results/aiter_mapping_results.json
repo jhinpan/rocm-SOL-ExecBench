@@ -1,0 +1,43 @@
+{
+  "summary": {
+    "mapped": 3,
+    "correct": 3,
+    "speedups": {
+      "L1/085_geglu_activation": 1.46,
+      "cuda_cpp/rmsnorm": 3.25,
+      "triton/rmsnorm": 3.3
+    }
+  },
+  "results": [
+    {
+      "problem": "L1/085_geglu_activation",
+      "recognizer": "recognize_geglu",
+      "aiter_fn": "gelu_tanh_and_mul",
+      "backend": "HIP",
+      "passed": 16,
+      "total": 16,
+      "all_pass": true,
+      "median_speedup": 1.46
+    },
+    {
+      "problem": "cuda_cpp/rmsnorm",
+      "recognizer": "recognize_rmsnorm",
+      "aiter_fn": "rms_norm",
+      "backend": "CK",
+      "passed": 14,
+      "total": 14,
+      "all_pass": true,
+      "median_speedup": 3.25
+    },
+    {
+      "problem": "triton/rmsnorm",
+      "recognizer": "recognize_rmsnorm",
+      "aiter_fn": "rms_norm",
+      "backend": "CK",
+      "passed": 14,
+      "total": 14,
+      "all_pass": true,
+      "median_speedup": 3.3
+    }
+  ]
+}
