@@ -41,10 +41,15 @@ def _fields(d: dict):
 
     inputs/outputs in a Definition are name->spec dicts; we only need the
     ordered argument names, which list(dict) yields (insertion order, py3.7+).
+    A malformed definition (non-string reference, non-mapping inputs/outputs)
+    must degrade to "no match", never raise -- recognizers downstream call
+    ref.lower() and len()/list() unconditionally.
     """
-    ref = d.get("reference") or ""
-    ins = list(d.get("inputs") or {})
-    outs = list(d.get("outputs") or {})
+    ref = d.get("reference")
+    ref = ref if isinstance(ref, str) else ""
+    raw_ins, raw_outs = d.get("inputs"), d.get("outputs")
+    ins = list(raw_ins) if isinstance(raw_ins, dict) else []
+    outs = list(raw_outs) if isinstance(raw_outs, dict) else []
     return ref, ins, outs
 
 
@@ -157,7 +162,61 @@ def recognize_swiglu(d: dict) -> Optional[dict]:
     return {"kernel": src, "aiter_fn": "silu_and_mul", "backend": "HIP"}
 
 
-RECOGNIZERS = [recognize_rmsnorm, recognize_geglu, recognize_swiglu]
+# --- L2 fusion recognizers (compose aiter primitives for fused chains) -------
+
+def recognize_gated_mlp_silu(d: dict) -> Optional[dict]:
+    """Gated MLP: linear(x, gate_up) -> split -> silu(gate)*up -> linear(_, down).
+    Maps the gate to aiter.silu_and_mul (fused) + hipBLASLt linears."""
+    ref, ins, outs = _fields(d)
+    if len(ins) != 3 or len(outs) != 1:
+        return None
+    r = ref.lower()
+    if not ("linear(" in r or "@" in ref):
+        return None
+    if "silu" not in r and "sigmoid" not in r:
+        return None
+    if "chunk(2" not in r and "split" not in r:
+        return None
+    x, gate_up, down = ins
+    src = (
+        "import torch\nimport aiter\nimport torch.nn.functional as F\n\n"
+        "@torch.no_grad()\n"
+        f"def run({x}, {gate_up}, {down}):\n"
+        f"    up = F.linear({x}, {gate_up})\n"
+        f"    act = torch.empty(*up.shape[:-1], up.shape[-1] // 2, dtype=up.dtype, device=up.device)\n"
+        f"    aiter.silu_and_mul(act, up)  # fused SiLU gate (production kernel)\n"
+        f"    return F.linear(act, {down})\n"
+    )
+    return {"kernel": src, "aiter_fn": "silu_and_mul+linear", "backend": "HIP+hipBLASLt"}
+
+
+def recognize_post_norm_residual(d: dict) -> Optional[dict]:
+    """output = residual + RMSNorm(x). Maps RMSNorm to aiter.rms_norm, then add."""
+    ref, ins, outs = _fields(d)
+    if len(ins) != 4 or len(outs) != 1:
+        return None
+    r = ref.lower()
+    if not ("rsqrt" in r and "mean" in r and ("pow(2)" in r or "**2" in r)):
+        return None
+    if "residual" not in r or ("+ residual" not in r and "residual +" not in r):
+        return None
+    x, residual, weight, eps = ins
+    src = (
+        "import torch\nimport aiter\n\n"
+        "@torch.no_grad()\n"
+        f"def run({x}, {residual}, {weight}, {eps}):\n"
+        f"    shp = {x}.shape\n"
+        f"    x2 = {x}.reshape(-1, shp[-1]).contiguous()  # aiter CK rmsnorm wants 2D [tokens, hidden]\n"
+        f"    n = aiter.rms_norm(x2, {weight}, float({eps})).reshape(shp)\n"
+        f"    return {residual} + n\n"
+    )
+    return {"kernel": src, "aiter_fn": "rms_norm+add", "backend": "CK"}
+
+
+RECOGNIZERS = [
+    recognize_rmsnorm, recognize_geglu, recognize_swiglu,
+    recognize_gated_mlp_silu, recognize_post_norm_residual,
+]
 
 
 def map_problem(definition: dict) -> Optional[dict]:

@@ -1,14 +1,46 @@
 {
   "summary": {
-    "mapped": 3,
-    "correct": 3,
+    "mapped": 8,
+    "correct": 5,
     "speedups": {
-      "L1/085_geglu_activation": 1.46,
-      "cuda_cpp/rmsnorm": 3.25,
-      "triton/rmsnorm": 3.3
+      "L1/074_fused_gated_mlp_silu": 1.09,
+      "L1/085_geglu_activation": 1.45,
+      "cuda_cpp/rmsnorm": 3.03,
+      "triton/olmo3_post_norm": 2.27,
+      "triton/rmsnorm": 3.27
     }
   },
   "results": [
+    {
+      "problem": "L1/033_post_norm_residual",
+      "recognizer": "recognize_post_norm_residual",
+      "aiter_fn": "rms_norm+add",
+      "backend": "CK",
+      "passed": 12,
+      "total": 16,
+      "all_pass": false,
+      "median_speedup": 4.31
+    },
+    {
+      "problem": "L1/069_rms_norm",
+      "recognizer": "recognize_post_norm_residual",
+      "aiter_fn": "rms_norm+add",
+      "backend": "CK",
+      "passed": 0,
+      "total": 16,
+      "all_pass": false,
+      "median_speedup": null
+    },
+    {
+      "problem": "L1/074_fused_gated_mlp_silu",
+      "recognizer": "recognize_gated_mlp_silu",
+      "aiter_fn": "silu_and_mul+linear",
+      "backend": "HIP+hipBLASLt",
+      "passed": 16,
+      "total": 16,
+      "all_pass": true,
+      "median_speedup": 1.09
+    },
     {
       "problem": "L1/085_geglu_activation",
       "recognizer": "recognize_geglu",
@@ -17,7 +49,7 @@
       "passed": 16,
       "total": 16,
       "all_pass": true,
-      "median_speedup": 1.46
+      "median_speedup": 1.45
     },
     {
       "problem": "cuda_cpp/rmsnorm",
@@ -27,7 +59,27 @@
       "passed": 14,
       "total": 14,
       "all_pass": true,
-      "median_speedup": 3.25
+      "median_speedup": 3.03
+    },
+    {
+      "problem": "triton/nemotron_rms_norm",
+      "recognizer": "recognize_post_norm_residual",
+      "aiter_fn": "rms_norm+add",
+      "backend": "CK",
+      "passed": 0,
+      "total": 3,
+      "all_pass": false,
+      "median_speedup": null
+    },
+    {
+      "problem": "triton/olmo3_post_norm",
+      "recognizer": "recognize_post_norm_residual",
+      "aiter_fn": "rms_norm+add",
+      "backend": "CK",
+      "passed": 3,
+      "total": 3,
+      "all_pass": true,
+      "median_speedup": 2.27
     },
     {
       "problem": "triton/rmsnorm",
@@ -37,7 +89,7 @@
       "passed": 14,
       "total": 14,
       "all_pass": true,
-      "median_speedup": 3.3
+      "median_speedup": 3.27
     }
   ]
 }
