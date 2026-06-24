@@ -23,7 +23,9 @@ def time_ms(fn, warmup=20, rep=100) -> float:
     s = [torch.cuda.Event(enable_timing=True) for _ in range(rep)]
     e = [torch.cuda.Event(enable_timing=True) for _ in range(rep)]
     for i in range(rep):
-        s[i].record(); fn(); e[i].record()
+        s[i].record()
+        fn()
+        e[i].record()
     torch.cuda.synchronize()
     t = sorted(si.elapsed_time(ei) for si, ei in zip(s, e))
     return t[len(t) // 2]  # median
@@ -47,7 +49,8 @@ def main():
     x = torch.randn(B, H, dtype=torch.bfloat16, device=dev)
     w = torch.randn(H, dtype=torch.bfloat16, device=dev)
     def ref_rms():
-        xf = x.float(); inv = torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + 1e-5)
+        xf = x.float()
+        inv = torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + 1e-5)
         return ((xf * inv) * w.float()).to(x.dtype)
     aiter_ms = time_ms(lambda: aiter.rms_norm(x, w, 1e-5))
     ref_ms = time_ms(ref_rms)

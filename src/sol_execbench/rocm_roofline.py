@@ -14,8 +14,9 @@ score reuses :func:`sol_execbench.sol_score.sol_score`.
 Peak numbers are vendor-published dense peaks (no sparsity):
 - MI300X (CDNA3, gfx942): HBM3 5.3 TB/s; matrix BF16/FP16 1307 TFLOP/s,
   FP8 2615 TFLOP/s, FP32 163 TFLOP/s, FP64 163 TFLOP/s.
-- MI355X (CDNA4, gfx950): HBM3e ~8.0 TB/s; matrix BF16/FP16 ~2510 TFLOP/s,
-  FP8 ~5020 TFLOP/s, FP4 ~10080 TFLOP/s (approximate).
+- MI355X (CDNA4, gfx950): HBM3e 8.0 TB/s; matrix BF16/FP16 2516.6 TFLOP/s,
+  FP8 5033.2 TFLOP/s, FP4 10066.3 TFLOP/s, FP32 157.3 TFLOP/s, FP64 78.6
+  TFLOP/s (AMD datasheet, dense / no sparsity).
 """
 from __future__ import annotations
 
@@ -47,10 +48,10 @@ GPU_SPECS: dict[str, GpuSpec] = {
         name="AMD Instinct MI355X (CDNA4, gfx950)",
         hbm_bw_bytes_per_s=8.0e12,
         peak_flops={
-            "float16": 2510.0 * _TFLOP, "bfloat16": 2510.0 * _TFLOP,
-            "float8_e4m3fn": 5020.0 * _TFLOP, "float8_e5m2": 5020.0 * _TFLOP,
-            "float4_e2m1fn_x2": 10080.0 * _TFLOP,
-            "float32": 157.0 * _TFLOP, "float64": 78.6 * _TFLOP,
+            "float16": 2516.6 * _TFLOP, "bfloat16": 2516.6 * _TFLOP,
+            "float8_e4m3fn": 5033.2 * _TFLOP, "float8_e5m2": 5033.2 * _TFLOP,
+            "float4_e2m1fn_x2": 10066.3 * _TFLOP,
+            "float32": 157.3 * _TFLOP, "float64": 78.6 * _TFLOP,
         },
     ),
 }

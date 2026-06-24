@@ -3,7 +3,7 @@
 NVIDIA's SOL-Score grades a kernel against a **B200** speed-of-light bound (from SOLAR, NVIDIA-only), so it's meaningless on AMD. This adds an **MI300X / MI355X roofline** so an AMD SOL-Score can be computed.
 
 `src/sol_execbench/rocm_roofline.py`:
-- `GPU_SPECS` — MI300X (CDNA3): HBM3 5.3 TB/s; BF16/FP16 1307, FP8 2615, FP32 163 TFLOP/s. MI355X (CDNA4): ~8 TB/s; BF16 ~2510, FP8 ~5020, FP4 ~10080 TFLOP/s.
+- `GPU_SPECS` — MI300X (CDNA3): HBM3 5.3 TB/s; BF16/FP16 1307, FP8 2615, FP32/FP64 163 TFLOP/s. MI355X (CDNA4): 8 TB/s; BF16/FP16 2516.6, FP8 5033.2, FP4 10066.3, FP32 157.3, FP64 78.6 TFLOP/s (AMD datasheet, dense / no sparsity).
 - `roofline_time_s(flops, bytes, dtype, gpu)` → `t_sol = max(flops/peak_flops, bytes/peak_bw)`.
 - `amd_sol_score(measured_ms, baseline_ms, flops, bytes, dtype, gpu)` → `{t_sol_ms, regime, achieved_pct_of_sol, sol_score}` (reuses `sol_score.sol_score`, clamped to [0,1]).
 - `gemm_flops_bytes(M,N,K,…)`, `elementwise_bytes(n, n_read, n_write, …)` estimators.
