@@ -25,7 +25,17 @@ from functools import partial
 from typing import Any, Literal, Union
 
 import torch
-from cupti import cupti
+
+# ROCm port: CUPTI is NVIDIA-only and absent on ROCm. Guard the import so this
+# module loads on AMD; timing falls back to the CUDA/HIP-events path (CUPTI is
+# only reachable via methodology="cupti", which we auto-downgrade when missing).
+try:
+    from cupti import cupti
+
+    _HAS_CUPTI = True
+except Exception:  # pragma: no cover - ROCm / environments without cupti-python
+    cupti = None
+    _HAS_CUPTI = False
 
 from sol_execbench.core.bench.io import ShiftingMemoryPoolAllocator
 
@@ -423,7 +433,7 @@ def time_runnable(
     warmup: int = 10,
     rep: int = 100,
     return_mode: Literal["mean", "median", "all"] = "median",
-    methodology: Literal["cuda_events", "cupti"] = "cupti",
+    methodology: Literal["cuda_events", "cupti"] = "cuda_events",
 ) -> Union[float, list[float]]:
     """Time the execution of a callable using CUDA events.
 
@@ -458,6 +468,10 @@ def time_runnable(
     float | list[float]
         Benchmark result(s) in milliseconds.
     """
+    # ROCm port: CUPTI is unavailable on AMD; transparently fall back to the
+    # CUDA/HIP-events timing path so timing works without NVIDIA's profiler.
+    if methodology == "cupti" and not _HAS_CUPTI:
+        methodology = "cuda_events"
     total_iterations = warmup + rep
     allocator = ShiftingMemoryPoolAllocator(inputs, outputs, total_iterations)
     with torch.cuda.device(device):

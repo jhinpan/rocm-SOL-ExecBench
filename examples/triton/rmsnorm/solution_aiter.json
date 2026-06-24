@@ -1,0 +1,26 @@
+{
+  "name": "rmsnorm_aiter_ck",
+  "definition": "rmsnorm_h4096",
+  "author": "rocm-port-aiter",
+  "spec": {
+    "languages": [
+      "pytorch"
+    ],
+    "target_hardware": [
+      "MI300X",
+      "LOCAL_AMD"
+    ],
+    "entry_point": "kernel.py::run",
+    "dependencies": [
+      "torch",
+      "aiter"
+    ],
+    "destination_passing_style": false
+  },
+  "sources": [
+    {
+      "path": "kernel.py",
+      "content": "import torch\nimport aiter\n\n@torch.no_grad()\ndef run(hidden_states, weight):\n    # AMD production kernel: aiter CK rmsnorm (eps must match the reference)\n    return aiter.rms_norm(hidden_states, weight, 1e-5)\n"
+    }
+  ]
+}

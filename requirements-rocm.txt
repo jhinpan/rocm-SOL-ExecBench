@@ -1,0 +1,12 @@
+# ROCm install: use the system ROCm PyTorch (do NOT install torch from here),
+# then: pip install --no-deps -e .  &&  pip install -r requirements-rocm.txt
+# Portable runtime deps for the PyTorch/Triton evaluation path only.
+pydantic>=2.12.5
+safetensors>=0.7.0
+click>=8.0
+rich>=13.0
+datasets>=4.8.2
+ninja>=1.13.0
+# NOT installed on ROCm (NVIDIA-only, guarded/skipped in this port):
+#   torch (use the ROCm build already in the image), triton (ROCm build ships with torch),
+#   cupti-python, cuda-tile, nvidia-cudnn-frontend, nvidia-cutlass-dsl

@@ -224,6 +224,11 @@ def _print_traces_table(traces: list[Trace]) -> None:
 @click.option("--json", "json_output", is_flag=True, help="Print trace JSON to stdout")
 @click.option("--lock-clocks", is_flag=True, help="Require GPU clocks to be locked")
 @click.option(
+    "--benchmark-reference",
+    is_flag=True,
+    help="Also time the PyTorch reference and report speedup (solution vs reference).",
+)
+@click.option(
     "--keep-staging", is_flag=True, help="Keep the staging directory after evaluation"
 )
 @click.option("--verbose", "-v", is_flag=True, help="Show subprocess output")
@@ -238,6 +243,7 @@ def cli(
     output_file: Optional[Path],
     json_output: bool,
     lock_clocks: bool,
+    benchmark_reference: bool,
     keep_staging: bool,
     verbose: bool,
 ):
@@ -274,6 +280,8 @@ def cli(
 
     if lock_clocks:
         config.lock_clocks = True
+    if benchmark_reference:
+        config.benchmark_reference = True
 
     console.print(f"[bold]Problem:[/bold]  {definition.name}")
     console.print(f"[bold]Solution:[/bold] {solution.name}")
