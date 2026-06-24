@@ -56,7 +56,7 @@ Supported solution languages on ROCm: **PyTorch, Triton**, and **Python wrappers
 ## Caveats
 - **SOL-Score:** upstream grades against a **B200** roofline (SOLAR is NVIDIA-only). This fork adds an **MI300X/MI355X** roofline (`src/sol_execbench/rocm_roofline.py`); AMD SOL-Scores are **not comparable** to NVIDIA's leaderboard.
 - **CUPTI** device-timing is replaced by HIP-event timing on ROCm; `nvidia-smi` clock-lock is a no-op on AMD.
-- Of the 235 dataset problems, **19 are FP8/FP4 (Quant)** and **26 are FlashInfer-Bench** (loader/validation) — not runnable via this path.
+- Of the 235 dataset problems, **60 are not runnable** via this path: **33 Quant** (FP8/FP4 numeric formats; 19 detected as `float8_e4m3fn`/`float4_e2m1fn_x2`) and **26 FlashInfer-Bench** (a strict-validation loader quirk, not a GPU gap), plus **1 L2** partial. The standard L1+L2 set (176 problems) is **175/176** runnable — see [`ROCM_PORT.md`](ROCM_PORT.md).
 
 <a name="upstream"></a>
 ## Upstream (NVIDIA SOL-ExecBench)

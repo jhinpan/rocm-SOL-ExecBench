@@ -14,9 +14,9 @@ python scripts/run_aiter_mapping.py '<glob>/definition.json'
 ## Verified results (8× MI300X, ROCm 7.2)
 | Problem | aiter kernel | backend | correctness | speedup vs reference |
 |---|---|---|---|---|
-| `L1/085_geglu_activation` | `gelu_tanh_and_mul` | HIP | 16/16 ✅ | **1.46×** |
-| `examples/cuda_cpp/rmsnorm` | `rms_norm` | CK | 14/14 ✅ | **3.25×** |
-| `examples/triton/rmsnorm` | `rms_norm` | CK | 14/14 ✅ | **3.30×** |
+| `L1/085_geglu_activation` | `gelu_tanh_and_mul` | HIP | 16/16 ✅ | **1.45×** |
+| `examples/cuda_cpp/rmsnorm` | `rms_norm` | CK | 14/14 ✅ | **3.03×** |
+| `examples/triton/rmsnorm` | `rms_norm` | CK | 14/14 ✅ | **3.27×** |
 
 The driver **gates on correctness** — a result is a win only when *every* workload row PASSED. A mismatch (e.g. wrong GELU variant), a solution crash, empty/garbled harness output, a missing `sol-execbench`, or a timeout all report FAIL and are excluded, never counted as a win.
 
