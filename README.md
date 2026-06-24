@@ -1,156 +1,64 @@
-# SOL ExecBench
+# rocm-SOL-ExecBench
 
 <div align="center" id="top">
 
-[![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg)](/docs/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-[HuggingFace Dataset](https://huggingface.co/datasets/nvidia/SOL-ExecBench) | [Leaderboard](https://research.nvidia.com/benchmarks/sol-execbench)
-| [Technical Report](https://arxiv.org/abs/2603.19173) </div>
+**A ROCm / AMD Instinct port of [NVIDIA SOL-ExecBench](https://github.com/NVIDIA/SOL-ExecBench)** — run the GPU-kernel benchmark on **AMD MI300X (gfx942)** and grade kernels against **AMD speed-of-light**, with the PyTorch reference as the correctness oracle.
 
-**Speed-Of-Light ExecBench** is a rigorous GPU kernel evaluation and benchmarking framework built to benchmark AI-generated kernel solutions written with the variety of DSLs that NVIDIA hardware supports.
+</div>
 
-Kernels are:
-* Checked for various forms of reward hacking
-* Tested against a reference solution for numerical correctness
-* Timed under reproducible conditions
+> This is a community ROCm fork. Upstream SOL-ExecBench (NVIDIA) targets NVIDIA Blackwell (B200) with CUDA DSLs and a B200 SOL-Score. This fork makes the **PyTorch + Triton** path run on **AMD ROCm**, maps benchmark ops to **production AMD kernels (aiter: ASM / CK / FlyDSL)**, and adds an **MI300X/MI355X roofline SOL-Score**. All credit for the original framework, dataset, and methodology goes to NVIDIA — see [Upstream](#upstream).
 
-Leaderboard submissions are ranked based on [SOL-Score](/src/sol_execbench/sol_score.py): a metric that grades custom kernel performance based on the theoretical roofline of a NVIDIA B200 GPU (obtained analytically with [SOLAR](https://github.com/NVlabs/SOLAR)).  
+## What this fork adds
 
-Supported kernel languages: PyTorch, Triton, CUTLASS, cuDNN, CuTe DSL, cuTile, CUDA C++.
+| Capability | Where | Status (8× MI300X, ROCm 7.2) |
+|---|---|---|
+| Run the **PyTorch/Triton path on ROCm** (CUPTI→HIP-event timing, no `uv`/CUDA stack) | [`ROCM_PORT.md`](ROCM_PORT.md) | ✅ 5/5 examples pass |
+| **Full-dataset runnability** (PyTorch reference per problem) | [`ROCM_PORT.md`](ROCM_PORT.md) | ✅ **175/176** standard L1+L2 run |
+| **Op → production aiter kernel map** (aiter/CK/ASM/FlyDSL) | [`KERNEL_MAPPING.md`](KERNEL_MAPPING.md) | gemm/attention/moe/norm/rope/activation covered |
+| **Mapping driver** — wires aiter kernels as solutions, correctness-gated, reports speedup | [`MAPPING_DRIVER.md`](MAPPING_DRIVER.md) | ✅ rmsnorm 3.3×, geglu 1.45×, gated-MLP 1.1×, post-norm 2.3× |
+| **AMD SOL-Score** — MI300X/MI355X roofline (NVIDIA's is B200-bound) | [`ROCM_ROOFLINE.md`](ROCM_ROOFLINE.md) | ✅ aiter rmsnorm 61% of memory SOL; hipBLASLt GEMM 47% of BF16 peak |
+| `--benchmark-reference` flag (solution-vs-reference speedup) | `src/sol_execbench/cli/main.py` | ✅ |
 
-## Prerequisites
+**Philosophy:** Triton/PyTorch are not what runs in production — the PyTorch reference is kept only as the **correctness oracle**, and real **AMD production kernels (aiter)** are the solutions under test.
 
-- Docker with [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-- [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/guides/cli) (`pip install huggingface-hub[cli]`)
-- NVIDIA driver version 580+
+## ROCm quickstart (AMD)
 
-## Setup
-
-### 1. Download benchmark data (one-time)
-
-```bash
-./scripts/download_data.sh
-```
-
-This downloads the [SOL-ExecBench](https://huggingface.co/datasets/nvidia/SOL-ExecBench) and [FlashInfer Trace](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace) datasets into `data/`.
-
-### 2. Build and launch the Docker container
+Run inside a ROCm PyTorch container (torch already installed; **do not** use `uv` or install the NVIDIA CUDA wheels):
 
 ```bash
-./scripts/run_docker.sh --build
+pip install --no-deps -e .
+pip install -r requirements-rocm.txt
+
+# (one-time) download the benchmark dataset
+python scripts/download_solexecbench.py
+
+# 1) examples — production-kernel solutions, correctness-verified vs reference
+bash scripts/run_rocm_examples.sh
+
+# 2) full-dataset runnability on MI300X (PyTorch reference per problem)
+python scripts/make_reference_solutions.py && python scripts/run_rocm_dataset.py
+
+# 3) map ops to aiter kernels, report correctness + speedup
+python scripts/run_aiter_mapping.py
+
+# 4) AMD (MI300X) SOL-Score demo / self-test
+python scripts/rocm_sol_score_demo.py             # live on GPU
+python scripts/rocm_sol_score_demo.py --self-test # CPU-only invariants
+
+# evaluate one solution
+sol-execbench <problem_dir> --solution sol.json --benchmark-reference
 ```
 
-This builds the image and drops you into an interactive shell inside the container. The repo's `src/`, `tests/`, and downloaded data are mounted automatically.
+Supported solution languages on ROCm: **PyTorch, Triton**, and **Python wrappers over aiter** (ASM/CK/FlyDSL kernels). CUDA-only DSLs (CUTLASS, cuDNN, CuTe, cuTile, CUDA C++) and FP8/FP4 (Quant) problems are out of scope on AMD.
 
-## Evaluating a Solution
+## Caveats
+- **SOL-Score:** upstream grades against a **B200** roofline (SOLAR is NVIDIA-only). This fork adds an **MI300X/MI355X** roofline (`src/sol_execbench/rocm_roofline.py`); AMD SOL-Scores are **not comparable** to NVIDIA's leaderboard.
+- **CUPTI** device-timing is replaced by HIP-event timing on ROCm; `nvidia-smi` clock-lock is a no-op on AMD.
+- Of the 235 dataset problems, **19 are FP8/FP4 (Quant)** and **26 are FlashInfer-Bench** (loader/validation) — not runnable via this path.
 
-Inside the container, use the `sol-execbench` CLI:
+<a name="upstream"></a>
+## Upstream (NVIDIA SOL-ExecBench)
 
-```bash
-# Evaluate using a problem directory (contains definition.json + workload.jsonl)
-sol-execbench <problem_dir> --solution solution.json
-
-# Or specify files explicitly
-sol-execbench --definition def.json --workload wkl.jsonl --solution sol.json
-```
-
-### Example
-
-```bash
-# From the host — build, launch, and evaluate in one command:
-./scripts/run_docker.sh --build -- \
-  sol-execbench examples/cute_dsl/jamba_attn_proj \
-    --solution examples/cute_dsl/jamba_attn_proj/solution_cute_dsl.json
-
-# Or from inside the container:
-sol-execbench examples/cute_dsl/jamba_attn_proj \
-  --solution examples/cute_dsl/jamba_attn_proj/solution_cute_dsl.json
-```
-
-### CLI Options
-
-| Flag | Description |
-|---|---|
-| `--compile-timeout` | Compilation timeout in seconds (default: 120) |
-| `--timeout` | Evaluation timeout in seconds (default: 600) |
-| `--config` | Path to a BenchmarkConfig JSON (see [Benchmark Config](#benchmark-config) below) |
-| `-o, --output` | Write JSONL traces to file |
-| `--json` | Print traces as JSON to stdout |
-| `--lock-clocks` | Lock GPU clocks for stable benchmarks |
-| `--keep-staging` | Preserve staging directory after run |
-| `-v, --verbose` | Show subprocess output |
-
-### Benchmark Config
-
-Pass `--config bench.json` to override evaluator defaults. All fields are optional.
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `warmup_runs` | int | `10` | GPU warmup iterations before timing |
-| `iterations` | int | `50` | Timing iterations averaged into the latency report |
-| `lock_clocks` | bool | `false` | Require GPU clocks to be locked (also exposed as `--lock-clocks`) |
-| `benchmark_reference` | bool | `false` | When `true`, also time the reference implementation to compute speedup. **Disabled by default** because the reference can be dramatically slower than the kernel (sometimes >1 h), which dominates total evaluation time. Enable when you need a speedup factor in the trace. |
-| `seed` | int | `200` | RNG seed for input generation |
-
-A template with every field at its default value lives at [`bench_config.example.json`](bench_config.example.json) — copy it, edit the fields you want to override, and pass it via `--config`:
-
-```bash
-cp bench_config.example.json bench.json   # then edit bench.json
-sol-execbench <problem_dir> --solution solution.json --config bench.json
-```
-
-## Running a Dataset
-
-Use `scripts/run_dataset.py` to evaluate an entire dataset (or a single problem) in batch. By default it runs the definition's reference implementation as the solution unless `--solution-name` is specified. Saves to `./out/{subset}` by default.
-
-```bash
-# Run all problems in the benchmark.
-# Auto builds solution.json from a single code file
-uv run scripts/run_dataset.py data/SOL-ExecBench/benchmark --solution-name solution.py
-
-# Run specific categories with multiple solution code files
-uv run scripts/run_dataset.py data/SOL-ExecBench/benchmark --category L1 L2 --solution-name solution.json
-
-# Run a single problem
-uv run scripts/run_dataset.py data/SOL-ExecBench/benchmark/L1/my_problem
-
-# Limit number of problems and workloads
-uv run scripts/run_dataset.py data/SOL-ExecBench/benchmark --limit 5 --max-workloads 3 -o ./results
-```
-
-Results (traces and a summary JSON) are written to `out/run_dataset/` by default (override with `-o`). Problems that already passed are skipped on subsequent runs unless `--rerun` is specified.
-
-## Problem Format
-
-A problem directory contains:
-
-- **`definition.json`** — Kernel specification: function signature, tensor shapes, dtypes, reference implementation.
-- **`workload.jsonl`** — One JSON object per line, each defining input shapes, values, and tolerance thresholds.
-
-A solution is a separate JSON file referencing source files with the kernel implementation.
-
-See the full schema docs:
-
-- [Definition](docs/definition.md) — Kernel specification (function signature, tensor shapes, dtypes, reference code)
-- [Workload](docs/workload.md) — Concrete input configurations and tolerance thresholds
-- [Solution](docs/solution.md) — Source files and build specs for a kernel implementation
-- [Trace](docs/trace.md) — Evaluation output (correctness and performance results)
-
-## Citation
-
-```bibtex
-@misc{lin2026solexecbench,
-      title={SOL-ExecBench: Speed-of-Light Benchmarking for Real-World GPU Kernels Against Hardware Limits}, 
-      author={Edward Lin, Sahil Modi, Siva Kumar Sastry Hari, Qijing Huang, Zhifan Ye, Nestor Qin, Fengzhe Zhou, Yuan Zhang, Jingquan Wang, Sana Damani, Dheeraj Peri, Ouye Xie, Aditya Kane, Moshe Maor, Michael Behar, Triston Cao, Rishabh Mehta, Vartika Singh, Vikram Sharma Mailthody, Terry Chen, Zihao Ye, Hanfeng Chen, Tianqi Chen, Vinod Grover, Wei Chen, Wei Liu, Eric Chung, Luis Ceze, Roger Bringmann, Cyril Zeller, Michael Lightstone, Christos Kozyrakis, Humphrey Shi},
-      year={2026},
-      eprint={2603.19173},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2603.19173}, 
-}
-```
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE). Contributions require DCO sign-off — see [CONTRIBUTING.md](CONTRIBUTING.md).
+The original framework, dataset (`nvidia/SOL-ExecBench`), SOL-Score methodology, and the NVIDIA Docker/CUDA path are unchanged and still present (`scripts/run_docker.sh`, `docker/`, the CUDA DSL examples). Original project: <https://github.com/NVIDIA/SOL-ExecBench> · [dataset](https://huggingface.co/datasets/nvidia/SOL-ExecBench) · [technical report](https://arxiv.org/abs/2603.19173). License: Apache-2.0 (see `LICENSE`).
