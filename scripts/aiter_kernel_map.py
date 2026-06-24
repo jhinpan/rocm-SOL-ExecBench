@@ -41,10 +41,15 @@ def _fields(d: dict):
 
     inputs/outputs in a Definition are name->spec dicts; we only need the
     ordered argument names, which list(dict) yields (insertion order, py3.7+).
+    A malformed definition (non-string reference, non-mapping inputs/outputs)
+    must degrade to "no match", never raise -- recognizers downstream call
+    ref.lower() and len()/list() unconditionally.
     """
-    ref = d.get("reference") or ""
-    ins = list(d.get("inputs") or {})
-    outs = list(d.get("outputs") or {})
+    ref = d.get("reference")
+    ref = ref if isinstance(ref, str) else ""
+    raw_ins, raw_outs = d.get("inputs"), d.get("outputs")
+    ins = list(raw_ins) if isinstance(raw_ins, dict) else []
+    outs = list(raw_outs) if isinstance(raw_outs, dict) else []
     return ref, ins, outs
 
 
@@ -163,7 +168,7 @@ def recognize_gated_mlp_silu(d: dict) -> Optional[dict]:
     """Gated MLP: linear(x, gate_up) -> split -> silu(gate)*up -> linear(_, down).
     Maps the gate to aiter.silu_and_mul (fused) + hipBLASLt linears."""
     ref, ins, outs = _fields(d)
-    if ref is None or len(ins) != 3 or len(outs) != 1:
+    if len(ins) != 3 or len(outs) != 1:
         return None
     r = ref.lower()
     if not ("linear(" in r or "@" in ref):
@@ -188,7 +193,7 @@ def recognize_gated_mlp_silu(d: dict) -> Optional[dict]:
 def recognize_post_norm_residual(d: dict) -> Optional[dict]:
     """output = residual + RMSNorm(x). Maps RMSNorm to aiter.rms_norm, then add."""
     ref, ins, outs = _fields(d)
-    if ref is None or len(outs) != 1 or len(ins) != 4:
+    if len(ins) != 4 or len(outs) != 1:
         return None
     r = ref.lower()
     if not ("rsqrt" in r and "mean" in r and ("pow(2)" in r or "**2" in r)):
