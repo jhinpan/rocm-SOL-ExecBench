@@ -51,7 +51,7 @@ python scripts/rocm_sol_score_demo.py --self-test # CPU-only invariants
 sol-execbench <problem_dir> --solution sol.json --benchmark-reference
 ```
 
-Supported solution languages on ROCm: **PyTorch, Triton**, and **Python wrappers over aiter** (ASM/CK/FlyDSL kernels). CUDA-only DSLs (CUTLASS, cuDNN, CuTe, cuTile, CUDA C++) and FP8/FP4 (Quant) problems are out of scope on AMD.
+Supported solution languages on ROCm: **PyTorch, Triton**, and **Python wrappers over aiter** (ASM/CK/FlyDSL kernels). CUDA-only DSLs (CUTLASS, cuDNN, CuTe, cuTile, CUDA C++) and the FP8/FP4 (Quant) problems are out of scope for this port (the Quant problems' NVIDIA-specific quant path is not ported; MI300X itself supports FP8).
 
 ## Caveats
 - **SOL-Score:** upstream grades against a **B200** roofline (SOLAR is NVIDIA-only). This fork adds an **MI300X/MI355X** roofline (`src/sol_execbench/rocm_roofline.py`); AMD SOL-Scores are **not comparable** to NVIDIA's leaderboard.

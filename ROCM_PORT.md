@@ -35,7 +35,7 @@ The SOL-ExecBench dataset (`nvidia/SOL-ExecBench`) ships `definition.json` + `re
 |---|--:|--:|---|
 | **L1** single-op | 94 | **94 (100%)** | 1 needed >240 s (passes at 600 s) |
 | **L2** fusion | 82 | **81 (99%)** | `L2/033` partial (13/16 workloads); 3 needed 600 s |
-| **Quant** | 33 | **0** | FP8/FP4 (`float8_e4m3fn` / `float4_e2m1fn_x2`) — NVIDIA numeric formats; FP8 ops unsupported on MI300X (expected) |
+| **Quant** | 33 | **0** | FP8/FP4 (`float8_e4m3fn` / `float4_e2m1fn_x2`) — these problems' quant op/numeric-format path is NVIDIA-specific and not ported here (the underlying FP8 dtype is otherwise supported on MI300X/CDNA3) |
 | **FlashInfer-Bench** | 26 | **0** | `Definition` has an empty-string field → fails pydantic `min_length` at load (data/loader issue, not GPU; would fail on NVIDIA too) |
 | **Total** | 235 | **175** | |
 
