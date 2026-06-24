@@ -67,13 +67,39 @@ def dtype_bytes(dtype: str) -> int:
     return _DTYPE_BYTES.get(dtype, 2)
 
 
+def _spec(gpu: str) -> GpuSpec:
+    try:
+        return GPU_SPECS[gpu]
+    except KeyError:
+        raise KeyError(
+            f"unknown gpu {gpu!r}; known: {sorted(GPU_SPECS)}"
+        ) from None
+
+
+def _peak_flops(spec: GpuSpec, compute_dtype: str) -> float:
+    """Peak FLOP/s for the dtype, falling back to bf16 then any available peak."""
+    peak = spec.peak_flops.get(compute_dtype)
+    if peak is None:
+        peak = spec.peak_flops.get("bfloat16")
+    if peak is None and spec.peak_flops:
+        peak = next(iter(spec.peak_flops.values()))
+    return peak or 0.0
+
+
+def _roofline_components(flops: float, bytes_moved: float, compute_dtype: str,
+                         gpu: str) -> tuple[float, float]:
+    """(t_compute, t_memory) in seconds."""
+    spec = _spec(gpu)
+    peak = _peak_flops(spec, compute_dtype)
+    t_compute = (flops / peak) if (flops > 0 and peak > 0) else 0.0
+    t_memory = (bytes_moved / spec.hbm_bw_bytes_per_s) if bytes_moved > 0 else 0.0
+    return t_compute, t_memory
+
+
 def roofline_time_s(flops: float, bytes_moved: float, compute_dtype: str,
                     gpu: str = "MI300X") -> float:
     """Ideal (speed-of-light) execution time in seconds for the given GPU."""
-    spec = GPU_SPECS[gpu]
-    peak = spec.peak_flops.get(compute_dtype, spec.peak_flops.get("bfloat16"))
-    t_compute = (flops / peak) if (flops and peak) else 0.0
-    t_memory = (bytes_moved / spec.hbm_bw_bytes_per_s) if bytes_moved else 0.0
+    t_compute, t_memory = _roofline_components(flops, bytes_moved, compute_dtype, gpu)
     return max(t_compute, t_memory)
 
 
@@ -82,22 +108,28 @@ def amd_sol_score(measured_ms: float, baseline_ms: float, flops: float,
     """Compute the AMD SOL-Score for a measured kernel.
 
     Returns t_sol (ms), the bound regime (compute/memory), and the anchored
-    SOL-Score in [0, 1] (1.0 == at speed-of-light).
+    SOL-Score in [0, 1] (1.0 == at speed-of-light). A non-positive
+    ``measured_ms`` is treated as "no valid measurement" (score 0.0).
     """
-    spec = GPU_SPECS[gpu]
-    peak = spec.peak_flops.get(compute_dtype, spec.peak_flops.get("bfloat16"))
-    t_compute = (flops / peak) if (flops and peak) else 0.0
-    t_memory = (bytes_moved / spec.hbm_bw_bytes_per_s) if bytes_moved else 0.0
+    t_compute, t_memory = _roofline_components(flops, bytes_moved, compute_dtype, gpu)
     t_sol_s = max(t_compute, t_memory)
-    regime = "compute" if t_compute >= t_memory else "memory"
+    if t_sol_s <= 0.0:
+        regime = "none"  # no flops and no bytes supplied -> undefined bound
+    else:
+        regime = "compute" if t_compute >= t_memory else "memory"
     # SOL is a hard ceiling: a kernel cannot beat it. Clamp to [0, 1]; a measured
-    # time below t_sol means the bound is under-estimated for this op.
-    score = min(1.0, max(0.0, sol_score(measured_ms, baseline_ms, t_sol_s * 1e3)))
-    achieved = (t_sol_s * 1e3 / measured_ms * 100.0) if measured_ms > 0 else 0.0
+    # time below t_sol means the bound is under-estimated for this op. A
+    # non-positive measured time is not speed-of-light -- it is invalid input.
+    if measured_ms > 0:
+        score = min(1.0, max(0.0, sol_score(measured_ms, baseline_ms, t_sol_s * 1e3)))
+        achieved = min(100.0, t_sol_s * 1e3 / measured_ms * 100.0)
+    else:
+        score = 0.0
+        achieved = 0.0
     return {
         "gpu": gpu, "t_sol_ms": t_sol_s * 1e3, "regime": regime,
         "measured_ms": measured_ms, "baseline_ms": baseline_ms,
-        "achieved_pct_of_sol": min(100.0, achieved),
+        "achieved_pct_of_sol": achieved,
         "sol_score": score,
     }
 
