@@ -27,3 +27,16 @@ Lint: `ruff check scripts/aiter_kernel_map.py scripts/run_aiter_mapping.py` pass
 
 ## Scope
 Recognizers here cover **clean single ops**. The SOL dataset is dominated by **fused/composite** chains (e.g. attention+rope+qk_norm, conv+groupnorm+silu+residual), so single-op dataset coverage is small by design — those are handled by composing aiter primitives / aiter fused kernels (`fused_add_rmsnorm`, `fused_qk_norm_rope`, `silu_and_mul`, gated FF) in the **L2-fusion** work. This PR establishes the extensible framework + verified speedups; coverage grows by adding recognizers. See `KERNEL_MAPPING.md` for the full op→kernel map.
+
+## L2 fusion recognizers
+Beyond single ops, the registry composes aiter primitives for fused chains:
+- `recognize_gated_mlp_silu` — `linear(x, gate_up) → silu_and_mul → linear(_, down)`: maps the gate to aiter **`silu_and_mul`** (fused) + hipBLASLt linears.
+- `recognize_post_norm_residual` — `residual + RMSNorm(x)`: maps to aiter CK **`rms_norm`** (2D-flattened) + add.
+
+Verified fusion wins (8× MI300X, correctness-gated):
+| problem | composed kernel | correct | speedup |
+|---|---|---|---|
+| `L1/074_fused_gated_mlp_silu` | silu_and_mul + hipBLASLt linear | 16/16 ✅ | 1.09× |
+| `examples/triton/olmo3_post_norm` | aiter CK rms_norm + add | 3/3 ✅ | 2.27× |
+
+The gate excludes cases where aiter's rmsnorm differs from the reference on some workloads (`L1/033` 12/16, `nemotron_rms_norm` 0/3) — never counted as wins. This is by design: composition correctness is verified per-workload against the PyTorch reference.
