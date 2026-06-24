@@ -10,10 +10,36 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-import torch  # noqa: E402
 from sol_execbench.rocm_roofline import (  # noqa: E402
     amd_sol_score, gemm_flops_bytes, elementwise_bytes,
 )
+
+
+def self_test() -> None:
+    """CPU-only invariant checks (no GPU/torch needed)."""
+    # A kernel can never beat SOL: clamp to <= 1 even when measured < t_sol.
+    r = amd_sol_score(0.01, 0.5, 2 * 4096 ** 3, 0, "bfloat16", "MI300X")
+    assert r["sol_score"] == 1.0 and r["achieved_pct_of_sol"] <= 100.0
+    # A very slow kernel scores in [0, 1], never negative.
+    r = amd_sol_score(1000.0, 0.5, 2 * 4096 ** 3, 0, "bfloat16", "MI300X")
+    assert 0.0 <= r["sol_score"] < 0.01
+    # Invalid measurement -> not speed-of-light.
+    r = amd_sol_score(0.0, 0.5, 1e12, 1e9, "bfloat16", "MI300X")
+    assert r["sol_score"] == 0.0 and r["achieved_pct_of_sol"] == 0.0
+    # Regime detection.
+    assert amd_sol_score(1, 1, 1e15, 1, "bfloat16", "MI300X")["regime"] == "compute"
+    assert amd_sol_score(1, 1, 0, 1e12, "bfloat16", "MI300X")["regime"] == "memory"
+    assert amd_sol_score(1, 1, 0, 0, "bfloat16", "MI300X")["regime"] == "none"
+    # Unknown GPU is a clear error.
+    try:
+        amd_sol_score(1, 1, 1, 1, "bfloat16", "NOPE")
+        raise AssertionError("expected KeyError for unknown gpu")
+    except KeyError:
+        pass
+    print("self-test: all SOL-Score invariants hold")
+
+
+import torch  # noqa: E402
 
 
 def time_ms(fn, warmup=20, rep=100) -> float:
@@ -56,8 +82,11 @@ def main():
     ref_ms = time_ms(ref_rms)
     # bytes: read x + write y (w is negligible); ~2 passes of the big tensor
     flops, by = elementwise_bytes(B * H, n_read=1, n_write=1, dtype="bfloat16")
-    show(f"RMSNorm [{B}x{H}] bf16 — aiter CK rms_norm",
-         amd_sol_score(aiter_ms, ref_ms, flops, by, "bfloat16", "MI300X"))
+    rms = amd_sol_score(aiter_ms, ref_ms, flops, by, "bfloat16", "MI300X")
+    show(f"RMSNorm [{B}x{H}] bf16 — aiter CK rms_norm", rms)
+    assert rms["regime"] == "memory", "RMSNorm should be memory-bound"
+    assert aiter_ms >= rms["t_sol_ms"], "measured must be >= speed-of-light"
+    assert 0.0 <= rms["sol_score"] <= 1.0 and rms["achieved_pct_of_sol"] <= 100.0
 
     # 2) GEMM (compute-bound): aiter tuned gemm vs torch.matmul, 4096^3 bf16
     M = N = K = 4096
@@ -65,9 +94,15 @@ def main():
     b = torch.randn(K, N, dtype=torch.bfloat16, device=dev)
     mm_ms = time_ms(lambda: torch.matmul(a, b))  # hipBLASLt via torch (prod path)
     flops, by = gemm_flops_bytes(M, N, K, dtype="bfloat16")
-    show(f"GEMM {M}x{N}x{K} bf16 — torch.matmul (hipBLASLt)",
-         amd_sol_score(mm_ms, mm_ms, flops, by, "bfloat16", "MI300X"))
+    gemm = amd_sol_score(mm_ms, mm_ms, flops, by, "bfloat16", "MI300X")
+    show(f"GEMM {M}x{N}x{K} bf16 — torch.matmul (hipBLASLt)", gemm)
+    assert gemm["regime"] == "compute", "GEMM should be compute-bound"
+    assert mm_ms >= gemm["t_sol_ms"], "measured must be >= speed-of-light"
+    assert 0.0 <= gemm["sol_score"] <= 1.0 and gemm["achieved_pct_of_sol"] <= 100.0
 
 
 if __name__ == "__main__":
-    main()
+    if "--self-test" in sys.argv:
+        self_test()
+    else:
+        main()

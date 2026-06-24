@@ -11,10 +11,14 @@ NVIDIA's SOL-Score grades a kernel against a **B200** speed-of-light bound (from
 ## Live demo on MI300X (`scripts/rocm_sol_score_demo.py`, HIP-event timed)
 | Op | regime | t_sol | measured | % of SOL | SOL-Score |
 |---|---|---|---|---|---|
-| RMSNorm [8192×4096] bf16 — aiter CK `rms_norm` | memory | 0.0253 ms | 0.0453 ms | 55.9% | 0.938 |
-| GEMM 4096³ bf16 — hipBLASLt `matmul` | compute | 0.1051 ms | 0.2223 ms | 47.3% | 0.500 |
+| RMSNorm [8192×4096] bf16 — aiter CK `rms_norm` | memory | 0.0253 ms | ~0.041 ms | ~61% | ~0.95 |
+| GEMM 4096³ bf16 — hipBLASLt `matmul` | compute | 0.1051 ms | ~0.225 ms | ~47% | 0.500 |
 
-→ A real AMD speed-of-light metric: aiter rmsnorm reaches ~56% of HBM SOL; hipBLASLt GEMM ~47% of BF16 compute peak.
+→ A real AMD speed-of-light metric: aiter rmsnorm reaches ~60% of HBM SOL; hipBLASLt GEMM ~47% of BF16 compute peak. The demo asserts the physical invariants live (regime, `measured >= t_sol`, score in `[0,1]`, achieved `<= 100%`).
+
+`python scripts/rocm_sol_score_demo.py --self-test` runs the same invariant checks on CPU (no GPU/torch needed).
 
 ## Caveats
+The GEMM row scores exactly 0.500 because the demo uses `torch.matmul` as *both* candidate and baseline (`T_k == T_b`), where `sol_score` is 0.5 by construction; supply a slower reference to get a discriminating score.
+
 Peaks are vendor dense peaks (no sparsity). Per-problem FLOPs/bytes must be supplied (estimators given for gemm + elementwise; extend per op). This replaces the B200-bound SOL-Score with an MI300X-grounded one; it is not comparable to NVIDIA's leaderboard.
